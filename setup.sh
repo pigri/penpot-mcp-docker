@@ -9,6 +9,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
+SOURCE_REPO="https://github.com/penpot/penpot-mcp.git"
 SOURCE_DIR="penpot-mcp-source"
 IMAGE_NAME="penpot-mcp"
 CONTAINER_NAME="penpot-mcp-server"
@@ -58,8 +59,20 @@ check_prerequisites() {
     print_success "All prerequisites are met!"
 }
 
-# Validate local source repository
-check_source_directory() {
+# Clone or update local source repository
+ensure_source_directory() {
+    print_status "Preparing Penpot MCP source..."
+
+    if [ ! -d "$SOURCE_DIR" ]; then
+        git clone "$SOURCE_REPO" "$SOURCE_DIR"
+    elif [ -d "$SOURCE_DIR/.git" ]; then
+        print_status "Updating existing source checkout..."
+        git -C "$SOURCE_DIR" pull --ff-only
+    else
+        print_warning "'$SOURCE_DIR' already exists and is not a git checkout."
+        print_warning "Using the existing directory as-is."
+    fi
+
     print_status "Checking local Penpot MCP source..."
 
     if [ ! -d "$SOURCE_DIR" ]; then
@@ -74,7 +87,7 @@ check_source_directory() {
         exit 1
     fi
 
-    print_success "Local source directory is ready."
+    print_success "Source directory is ready."
 }
 
 # Setup environment file
@@ -146,26 +159,26 @@ main() {
     case "${1:-setup}" in
         "setup")
             check_prerequisites
-            check_source_directory
+            ensure_source_directory
             setup_environment
             build_image
             start_services
             ;;
         "build")
             check_prerequisites
-            check_source_directory
+            ensure_source_directory
             build_image
             ;;
         "start")
             check_prerequisites
-            check_source_directory
+            ensure_source_directory
             start_services
             ;;
         "help"|"--help"|"-h")
             echo "Usage: $0 [command]"
             echo
             echo "Commands:"
-            echo "  setup    Validate local source, build, and start [default]"
+            echo "  setup    Clone/update source, build, and start [default]"
             echo "  build    Only build the Docker image"
             echo "  start    Start the services"
             echo "  help     Show this help message"
