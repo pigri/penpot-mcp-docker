@@ -74,13 +74,6 @@ ensure_source_directory() {
     fi
 
     print_status "Checking local Penpot MCP source..."
-
-    if [ ! -d "$SOURCE_DIR" ]; then
-        print_error "Missing '$SOURCE_DIR' directory."
-        print_error "Place the Penpot MCP source in '$SOURCE_DIR' and try again."
-        exit 1
-    fi
-
     if [ ! -f "$SOURCE_DIR/package.json" ]; then
         print_error "Missing '$SOURCE_DIR/package.json'."
         print_error "The local source directory does not look like the Penpot MCP monorepo."
