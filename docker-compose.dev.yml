@@ -5,38 +5,28 @@ version: '3.8'
 
 services:
   penpot-mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: dev  # If we had a multi-stage build
     environment:
-      - DEBUG=true
-      - LOG_LEVEL=DEBUG
+      - PENPOT_MCP_LOG_LEVEL=debug
     volumes:
-      # Mount source code for development (hot reload)
-      - ./penpot_mcp:/app/penpot_mcp
-      - ./pyproject.toml:/app/pyproject.toml
-      - ./uv.lock:/app/uv.lock
-      # Mount cache volume for faster rebuilds
-      - dev_cache:/app/.cache
+      - ./penpot-mcp-source:/app/penpot-mcp-source
+      - /app/penpot-mcp-source/node_modules
+      - /app/penpot-mcp-source/common/node_modules
+      - /app/penpot-mcp-source/mcp-server/node_modules
+      - /app/penpot-mcp-source/penpot-plugin/node_modules
+      - dev_logs:/app/penpot-mcp-source/mcp-server/logs
     ports:
-      - "5000:5000"
-      - "5001:5001"  # Additional port for debugging
-    command: ["uv", "run", "--dev", "penpot-mcp"]
-    restart: "no"  # Don't auto-restart in dev mode
+      - "4400:4400"
+      - "4401:4401"
+      - "4402:4402"
+      - "4403:4403"
+    command: ["sh", "-lc", "npm install && npm run install:all && npm run build:all && npm run start:all"]
+    restart: "no"
     stdin_open: true
     tty: true
     healthcheck:
-      # More frequent health checks in dev
       interval: 10s
       timeout: 5s
       retries: 3
-
-  # Development tools and utilities
-  redis:
-    ports:
-      - "6379:6379"  # Expose Redis port for development
-    command: redis-server --appendonly yes --loglevel debug
 
   # Optional: Add a development database if needed
   postgres:
@@ -82,7 +72,7 @@ services:
       - '--web.enable-lifecycle'
 
 volumes:
-  dev_cache:
+  dev_logs:
     driver: local
   postgres_dev_data:
     driver: local

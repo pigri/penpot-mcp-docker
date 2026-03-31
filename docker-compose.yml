@@ -9,44 +9,34 @@ services:
     container_name: penpot-mcp-server
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "4400:4400"
+      - "4401:4401"
+      - "4402:4402"
+      - "4403:4403"
     environment:
-      - PENPOT_API_URL=${PENPOT_API_URL:-https://design.penpot.app/api}
-      - PENPOT_USERNAME=${PENPOT_USERNAME}
-      - PENPOT_PASSWORD=${PENPOT_PASSWORD}
-      - PORT=${PORT:-5000}
-      - DEBUG=${DEBUG:-false}
+      - PENPOT_MCP_SERVER_LISTEN_ADDRESS=${PENPOT_MCP_SERVER_LISTEN_ADDRESS:-0.0.0.0}
+      - PENPOT_MCP_PLUGIN_SERVER_LISTEN_ADDRESS=${PENPOT_MCP_PLUGIN_SERVER_LISTEN_ADDRESS:-0.0.0.0}
+      - PENPOT_MCP_SERVER_ADDRESS=${PENPOT_MCP_SERVER_ADDRESS:-localhost}
+      - PENPOT_MCP_SERVER_PORT=${PENPOT_MCP_SERVER_PORT:-4401}
+      - PENPOT_MCP_WEBSOCKET_PORT=${PENPOT_MCP_WEBSOCKET_PORT:-4402}
+      - PENPOT_MCP_REPL_PORT=${PENPOT_MCP_REPL_PORT:-4403}
+      - PENPOT_MCP_REMOTE_MODE=${PENPOT_MCP_REMOTE_MODE:-false}
+      - PENPOT_MCP_LOG_LEVEL=${PENPOT_MCP_LOG_LEVEL:-info}
     env_file:
       - .env
     volumes:
-      # Optional: Mount a volume for persistent cache/data
-      - penpot_cache:/app/.cache
+      - penpot_logs:/app/penpot-mcp-source/mcp-server/logs
     networks:
       - penpot-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4401/mcp').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-
-  # Optional: Add a Redis service for caching
-  redis:
-    image: redis:7-alpine
-    container_name: penpot-mcp-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - penpot-network
-    command: redis-server --appendonly yes
+      start_period: 20s
 
 volumes:
-  penpot_cache:
-    driver: local
-  redis_data:
+  penpot_logs:
     driver: local
 
 networks:
