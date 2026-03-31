@@ -20,280 +20,141 @@ A containerized version of the [PenPot MCP Server](https://github.com/montevive/
 
 ## 🛠️ Quick Start
 
-### 1. Clone the Repository
+Docker wrapper around the upstream Penpot MCP monorepo. This repository builds the source in `penpot-mcp-source/` inside a container and runs the upstream `npm run start:all` command.
+
+## ⚙️ What It Runs
+
+The container starts the upstream services on these ports:
+
+- `4400`: plugin manifest server
+- `4401`: MCP HTTP endpoint
+- `4402`: WebSocket endpoint used by the plugin
+- `4403`: REPL/debug server
+
+The image is currently based on `node:22-slim`.
+
+## 📁 Repository Layout
+
+- `Dockerfile`: builds and runs the upstream Node monorepo
+- `setup.sh`: clones or updates `penpot-mcp-source`, builds the image, and starts services
+- `penpot-mcp-source/`: local upstream checkout used by the Docker build
+
+## Prerequisites
+
+- Docker
+- Docker Compose or `docker compose`
+- Git
+
+## 🛠️ Quick Start
+
+### Use `setup.sh`
 
 ```bash
-git clone https://github.com/ajeetraina/penpot-mcp-docker.git
-cd penpot-mcp-docker
+chmod +x setup.sh
+./setup.sh setup
 ```
 
-### 2. Configure Environment Variables
+This flow:
+
+1. Clones `https://github.com/penpot/penpot-mcp.git` into `penpot-mcp-source/` if needed
+2. Updates that checkout when it is already a git repository
+3. Builds `penpot-mcp:latest`
+4. Starts the configured services
+
+Other commands:
 
 ```bash
-# Copy the example environment file
-cp .env.example .env
-
-# Edit the .env file with your Penpot credentials
-nano .env
+./setup.sh build
+./setup.sh start
+./setup.sh help
 ```
 
-**Required Configuration:**
-```env
-PENPOT_USERNAME=your_penpot_username
-PENPOT_PASSWORD=your_penpot_password
-PENPOT_API_URL=https://design.penpot.app/api
-```
-
-### 3. Deploy with Docker Compose
+### Build Manually
 
 ```bash
-# Build and start the services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f penpot-mcp
-
-# Check service status
-docker-compose ps
-```
-
-### 4. Verify Installation
-
-```bash
-# Check if the service is healthy
-curl http://localhost:5000/health
-
-# Test MCP server functionality
-docker-compose exec penpot-mcp penpot-client
-```
-
-## 🏗️ Alternative Deployment Methods
-
-### Method 1: Docker Run (Simple)
-
-```bash
-# Build the image
+git clone https://github.com/penpot/penpot-mcp.git penpot-mcp-source
 docker build -t penpot-mcp:latest .
+```
 
-# Run the container
-docker run -d \
+Run the container directly:
+
+```bash
+docker run --rm \
   --name penpot-mcp-server \
-  --restart unless-stopped \
-  -p 5000:5000 \
-  -e PENPOT_USERNAME=your_username \
-  -e PENPOT_PASSWORD=your_password \
-  -e PENPOT_API_URL=https://design.penpot.app/api \
+  -p 4400:4400 \
+  -p 4401:4401 \
+  -p 4402:4402 \
+  -p 4403:4403 \
   penpot-mcp:latest
 ```
 
-### Method 2: Using Pre-built Image (Coming Soon)
+## ✅ Verify Startup
+
+Useful endpoints after startup:
+
+- Plugin manifest: `http://localhost:4400/manifest.json`
+- MCP endpoint: `http://localhost:4401/mcp`
+- Legacy SSE endpoint: `http://localhost:4401/sse`
+- WebSocket endpoint: `ws://localhost:4402`
+
+Quick checks:
 
 ```bash
-# Pull and run from Docker Hub (when available)
-docker run -d \
-  --name penpot-mcp-server \
-  --restart unless-stopped \
-  -p 5000:5000 \
-  --env-file .env \
-  ajeetraina/penpot-mcp:latest
+curl http://localhost:4400/manifest.json
+curl http://localhost:4401/mcp
+docker logs penpot-mcp-server
 ```
 
-## ⚙️ Configuration
+## 🐳 Dockerfile Notes
 
-### Environment Variables
+The Docker image:
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `PENPOT_USERNAME` | Your Penpot username | - | ✅ |
-| `PENPOT_PASSWORD` | Your Penpot password | - | ✅ |
-| `PENPOT_API_URL` | Penpot API endpoint | `https://design.penpot.app/api` | ✅ |
-| `PORT` | Server port | `5000` | ❌ |
-| `DEBUG` | Enable debug mode | `false` | ❌ |
-| `LOG_LEVEL` | Logging level | `INFO` | ❌ |
-| `MAX_CACHE_SIZE` | Maximum cached files | `100` | ❌ |
-| `CACHE_EXPIRATION` | Cache expiration (seconds) | `3600` | ❌ |
+- copies package manifests first for better layer caching
+- installs root and package-level dependencies
+- builds the monorepo with `npm run build:all`
+- runs as a non-root `penpot` user
+- exposes `4400`, `4401`, `4402`, and `4403`
 
-### Volumes
+## 🔄 Upstream Source Handling
 
-- `penpot_cache:/app/.cache` - Persistent cache storage
-- `redis_data:/data` - Redis data persistence (if using Redis)
+This repository expects the upstream Penpot MCP source to live in `penpot-mcp-source/`.
 
-### Health Checks
-
-The container includes built-in health checks that monitor:
-- Server responsiveness on port 5000
-- API connectivity to Penpot
-- Service availability every 30 seconds
-
-## 🔧 Development
-
-### Building Locally
+`setup.sh` uses:
 
 ```bash
-# Clone the original source
-git clone https://github.com/montevive/penpot-mcp.git source/
-
-# Build with custom tag
-docker build -t penpot-mcp:dev .
-
-# Run in development mode
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+git clone https://github.com/penpot/penpot-mcp.git penpot-mcp-source
 ```
 
-### Debugging
+If `penpot-mcp-source/` already exists:
 
-```bash
-# Access container shell
-docker-compose exec penpot-mcp bash
-
-# View detailed logs
-docker-compose logs -f --tail=100 penpot-mcp
-
-# Test API connection
-docker-compose exec penpot-mcp python -c "import requests; print(requests.get('http://localhost:5000/health').json())"
-```
-
-## 🔍 Monitoring and Maintenance
-
-### Service Management
-
-```bash
-# Start services
-docker-compose up -d
-
-# Stop services
-docker-compose down
-
-# Restart specific service
-docker-compose restart penpot-mcp
-
-# View resource usage
-docker stats penpot-mcp-server
-```
-
-### Logs and Debugging
-
-```bash
-# Follow logs in real-time
-docker-compose logs -f penpot-mcp
-
-# Export logs to file
-docker-compose logs penpot-mcp > penpot-mcp.log
-
-# Check container health
-docker inspect --format='{{.State.Health.Status}}' penpot-mcp-server
-```
-
-### Updates
-
-```bash
-# Pull latest changes
-git pull origin main
-
-# Rebuild and restart
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
-```
-
-## 🔌 Integration with AI Tools
-
-### Claude Desktop Configuration
-
-Add to your Claude Desktop config:
-
-```json
-{
-  "mcpServers": {
-    "penpot": {
-      "command": "docker",
-      "args": ["exec", "penpot-mcp-server", "penpot-mcp"],
-      "env": {
-        "PENPOT_API_URL": "https://design.penpot.app/api",
-        "PENPOT_USERNAME": "your_username",
-        "PENPOT_PASSWORD": "your_password"
-      }
-    }
-  }
-}
-```
-
-### Cursor IDE Integration
-
-Configure Cursor with the containerized MCP server:
-
-```json
-{
-  "mcpServers": {
-    "penpot": {
-      "command": "docker",
-      "args": ["exec", "penpot-mcp-server", "penpot-mcp"]
-    }
-  }
-}
-```
+- if it is a git checkout, `setup.sh` updates it
+- if it is just a local directory, `setup.sh` leaves it in place and uses it as-is
 
 ## 🚨 Troubleshooting
 
-### Common Issues
+### Rebuild from scratch
 
-**Container won't start:**
 ```bash
-# Check logs for errors
-docker-compose logs penpot-mcp
-
-# Verify environment variables
-docker-compose exec penpot-mcp env | grep PENPOT
+docker build --no-cache -t penpot-mcp:latest .
 ```
 
-**Connection refused:**
+### Update the upstream checkout
+
 ```bash
-# Check if port is available
-netstat -tlnp | grep 5000
-
-# Test internal connectivity
-docker-compose exec penpot-mcp curl localhost:5000/health
+git -C penpot-mcp-source pull --ff-only
 ```
 
-**Authentication errors:**
+### Check whether ports are already in use
+
 ```bash
-# Verify credentials
-docker-compose exec penpot-mcp python -m penpot_mcp.api.penpot_api --debug list-projects
+lsof -i :4400
+lsof -i :4401
+lsof -i :4402
+lsof -i :4403
 ```
 
-### Performance Tuning
+## 📌 Current Status
 
-For production deployments:
+This README reflects the current Node-based `penpot-mcp-source` flow, the revised `setup.sh`, and the Docker image ports.
 
-```yaml
-# Add to docker-compose.yml
-services:
-  penpot-mcp:
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-```
-
-## 📚 API Documentation
-
-Once running, the MCP server provides these endpoints:
-
-- `GET /health` - Health check endpoint
-- `GET /server://info` - Server status and information
-- `GET /penpot://schema` - Penpot API schema as JSON
-- `GET /penpot://tree-schema` - Penpot object tree schema
-
-Available MCP tools:
-- `list_projects` - List all Penpot projects
-- `get_project_files` - Get files for a specific project
-- `get_file` - Retrieve a Penpot file by ID
-- `export_object` - Export a Penpot object as an image
-- `get_object_tree` - Get object tree structure
-- `search_object` - Search for objects within a file
-
-om/ajeetraina) | Docker Captain & ARM Innovator
+Some ancillary files, especially `docker-compose.yml` and `.env.example`, may still need alignment if you want the entire repository to follow the same `4400`-`4403` runtime model end-to-end.
