@@ -1,42 +1,31 @@
-# Use Python 3.12 slim image for smaller footprint
-FROM python:3.12-slim
+FROM node:22-slim
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    POETRY_VERSION=1.8.3 \
-    UV_VERSION=0.4.4
-
-# Set work directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv (modern Python package installer)
-RUN pip install uv==$UV_VERSION
+COPY penpot-mcp-source/package*.json ./penpot-mcp-source/
+COPY penpot-mcp-source/common/package*.json ./penpot-mcp-source/common/
+COPY penpot-mcp-source/mcp-server/package*.json ./penpot-mcp-source/mcp-server/
+COPY penpot-mcp-source/penpot-plugin/package*.json ./penpot-mcp-source/penpot-plugin/
 
-# Copy project files
-COPY . .
+WORKDIR /app/penpot-mcp-source
+RUN npm install && npm run install:all
 
-# Install Python dependencies using uv
-RUN uv sync --frozen
+COPY penpot-mcp-source/ ./
+RUN npm run build:all
 
-# Create a non-root user
 RUN useradd --create-home --shell /bin/bash penpot && \
     chown -R penpot:penpot /app
 USER penpot
 
-# Expose the default port
-EXPOSE 5000
+EXPOSE 4400 4401 4402 4403
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:5000/health')" || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:4401/mcp').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-# Default command - can be overridden
-CMD ["uv", "run", "penpot-mcp"]
+CMD ["npm", "run", "start:all"]

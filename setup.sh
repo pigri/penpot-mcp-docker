@@ -9,7 +9,6 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-SOURCE_REPO="https://github.com/montevive/penpot-mcp.git"
 SOURCE_DIR="penpot-mcp-source"
 IMAGE_NAME="penpot-mcp"
 CONTAINER_NAME="penpot-mcp-server"
@@ -39,58 +38,49 @@ command_exists() {
 # Check prerequisites
 check_prerequisites() {
     print_status "Checking prerequisites..."
-    
+
     if ! command_exists docker; then
         print_error "Docker is not installed. Please install Docker first."
         exit 1
     fi
-    
+
     if ! command_exists git; then
         print_error "Git is not installed. Please install Git first."
         exit 1
     fi
-    
+
     # Check if docker-compose exists (v1 or v2)
     if ! command_exists docker-compose && ! docker compose version >/dev/null 2>&1; then
         print_error "Docker Compose is not installed. Please install Docker Compose first."
         exit 1
     fi
-    
+
     print_success "All prerequisites are met!"
 }
 
-# Clone the source repository
-clone_source() {
-    print_status "Cloning the source repository..."
-    
-    if [ -d "$SOURCE_DIR" ]; then
-        print_warning "Source directory already exists. Updating..."
-        cd "$SOURCE_DIR"
-        git pull origin main
-        cd ..
-    else
-        git clone "$SOURCE_REPO" "$SOURCE_DIR"
-    fi
-    
-    print_success "Source code cloned successfully!"
-}
+# Validate local source repository
+check_source_directory() {
+    print_status "Checking local Penpot MCP source..."
 
-# Copy source files to current directory
-copy_source_files() {
-    print_status "Copying source files..."
-    
-    # Copy all source files except .git and other unnecessary files
-    rsync -av --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
-          --exclude='.pytest_cache' --exclude='.coverage' \
-          "$SOURCE_DIR/" ./
-    
-    print_success "Source files copied successfully!"
+    if [ ! -d "$SOURCE_DIR" ]; then
+        print_error "Missing '$SOURCE_DIR' directory."
+        print_error "Place the Penpot MCP source in '$SOURCE_DIR' and try again."
+        exit 1
+    fi
+
+    if [ ! -f "$SOURCE_DIR/package.json" ]; then
+        print_error "Missing '$SOURCE_DIR/package.json'."
+        print_error "The local source directory does not look like the Penpot MCP monorepo."
+        exit 1
+    fi
+
+    print_success "Local source directory is ready."
 }
 
 # Setup environment file
 setup_environment() {
     print_status "Setting up environment file..."
-    
+
     if [ ! -f ".env" ]; then
         cp .env.example .env
         print_warning "Created .env file from template. Please edit it with your Penpot credentials:"
@@ -106,49 +96,43 @@ setup_environment() {
 # Build Docker image
 build_image() {
     print_status "Building Docker image..."
-    
+
     docker build -t "$IMAGE_NAME:latest" .
-    
+
     print_success "Docker image built successfully!"
 }
 
 # Start services with Docker Compose
 start_services() {
     print_status "Starting services with Docker Compose..."
-    
+
     # Determine docker-compose command
     if command_exists docker-compose; then
         COMPOSE_CMD="docker-compose"
     else
         COMPOSE_CMD="docker compose"
     fi
-    
+
     $COMPOSE_CMD up -d
-    
+
     print_success "Services started successfully!"
-    
+
     print_status "Waiting for services to be healthy..."
     sleep 10
-    
-    # Check if the service is running
-    if curl -f http://localhost:5000/health >/dev/null 2>&1; then
+
+    # Check if the MCP HTTP endpoint is responding
+    if curl -f http://localhost:4401/mcp >/dev/null 2>&1; then
         print_success "PenPot MCP Server is running and healthy!"
         echo
         print_status "You can now:"
         echo "  • View logs: $COMPOSE_CMD logs -f penpot-mcp"
         echo "  • Check status: $COMPOSE_CMD ps"
-        echo "  • Access health endpoint: http://localhost:5000/health"
+        echo "  • MCP endpoint: http://localhost:4401/mcp"
+        echo "  • Plugin manifest: http://localhost:4400/manifest.json"
         echo "  • Stop services: $COMPOSE_CMD down"
     else
         print_warning "Service might still be starting up. Check logs with: $COMPOSE_CMD logs penpot-mcp"
     fi
-}
-
-# Clean up function
-cleanup() {
-    print_status "Cleaning up temporary files..."
-    rm -rf "$SOURCE_DIR"
-    print_success "Cleanup completed!"
 }
 
 # Main function
@@ -157,40 +141,33 @@ main() {
     print_status "🐳 PenPot MCP Server Docker Setup Script"
     echo "==========================================="
     echo
-    
+
     # Parse command line arguments
     case "${1:-setup}" in
         "setup")
             check_prerequisites
-            clone_source
-            copy_source_files
+            check_source_directory
             setup_environment
             build_image
             start_services
-            cleanup
             ;;
         "build")
             check_prerequisites
-            clone_source
-            copy_source_files
+            check_source_directory
             build_image
-            cleanup
             ;;
         "start")
             check_prerequisites
+            check_source_directory
             start_services
-            ;;
-        "clean")
-            cleanup
             ;;
         "help"|"--help"|"-h")
             echo "Usage: $0 [command]"
             echo
             echo "Commands:"
-            echo "  setup    Complete setup (clone, build, start) [default]"
+            echo "  setup    Validate local source, build, and start [default]"
             echo "  build    Only build the Docker image"
             echo "  start    Start the services"
-            echo "  clean    Clean up temporary files"
             echo "  help     Show this help message"
             echo
             exit 0
@@ -201,13 +178,10 @@ main() {
             exit 1
             ;;
     esac
-    
+
     echo
     print_success "🎉 Done! Your PenPot MCP Server is ready!"
 }
-
-# Trap to cleanup on exit
-trap cleanup EXIT INT TERM
 
 # Run main function
 main "$@"
